@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Scan Workspace Once",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "workspace_scanner.py",
+        "--root",
+        "."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Watch Workspace",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "workspace_scanner.py",
+        "--root",
+        ".",
+        "--watch"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+[console_scripts]
+intelscan = workspace_scanner:main
+intelscan-agent = agent_coordinator:main

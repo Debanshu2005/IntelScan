@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelscan"
+version = "0.1.0"
+description = "Workspace summary generator for AI-assisted development workflows."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+  { name = "IntelScan contributors" }
+]
+keywords = ["ai", "workspace", "scanner", "developer-tools", "automation"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Environment :: Console",
+  "Topic :: Software Development :: Build Tools"
+]
+
+[project.urls]
+Homepage = "https://github.com/Debanshu2005/IntelScan"
+Repository = "https://github.com/Debanshu2005/IntelScan"
+Issues = "https://github.com/Debanshu2005/IntelScan/issues"
+
+[project.scripts]
+intelscan = "workspace_scanner:main"
+intelscan-agent = "agent_coordinator:main"
+
+[tool.setuptools]
+py-modules = ["workspace_scanner", "agent_coordinator"]

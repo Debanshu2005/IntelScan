@@ -1,0 +1,2 @@
+agent_coordinator
+workspace_scanner
