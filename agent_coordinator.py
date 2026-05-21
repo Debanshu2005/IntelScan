@@ -5,6 +5,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 IGNORE_DIRS = {"node_modules", ".git", "__pycache__", "target", "build", ".venv", "venv"}
 IGNORE_FILES = {"workspace.json", "workspacememory.md"}
@@ -40,12 +41,15 @@ def collect_snapshot(root: Path):
     return snapshot
 
 
-def run_workspace_scanner(root: Path, scanner_path: Path, skip_initial_scan: bool):
+def run_workspace_scanner(root: Path, scanner_path: Optional[Path], skip_initial_scan: bool):
     if skip_initial_scan:
         return
-    if not scanner_path.exists():
-        raise FileNotFoundError(f"Workspace scanner not found at: {scanner_path}")
-    command = [sys.executable, str(scanner_path), "--root", str(root)]
+    if scanner_path is not None:
+        if not scanner_path.exists():
+            raise FileNotFoundError(f"Workspace scanner not found at: {scanner_path}")
+        command = [sys.executable, str(scanner_path), "--root", str(root)]
+    else:
+        command = [sys.executable, "-m", "workspace_scanner", "--root", str(root)]
     print(f"Running initial workspace scanner: {' '.join(command)}")
     result = subprocess.run(command, cwd=root)
     if result.returncode != 0:
@@ -63,15 +67,15 @@ def run_agent_command(root: Path, agent_cmd: str):
 def main():
     parser = argparse.ArgumentParser(description="Coordinate agent passes with automatic workspace manifest refresh.")
     parser.add_argument("--root", default=".", help="Workspace root directory")
-    parser.add_argument("--scanner", default="workspace_scanner.py", help="Workspace scanner script path")
+    parser.add_argument("--scanner", default="", help="Optional workspace scanner script path")
     parser.add_argument("--agent-cmd", required=True, help="Shell command that runs the agent pass")
     parser.add_argument("--skip-initial-scan", action="store_true", help="Do not run the scanner before the agent command")
     parser.add_argument("--always-refresh", action="store_true", help="Always refresh the manifest after the agent command, even if no file changes are detected")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    scanner_path = Path(args.scanner)
-    if not scanner_path.is_absolute():
+    scanner_path = Path(args.scanner) if args.scanner else None
+    if scanner_path is not None and not scanner_path.is_absolute():
         scanner_path = root / scanner_path
 
     run_workspace_scanner(root, scanner_path, args.skip_initial_scan)
