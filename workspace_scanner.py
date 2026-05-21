@@ -14,6 +14,7 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 OUTPUT_JSON = "workspace.json"
 OUTPUT_MD = "workspacememory.md"
+AGENTS_MD = "AGENTS.md"
 GIT_COMMAND_TIMEOUT_SECONDS = 5
 
 PACKAGE_FILES = [
@@ -484,11 +485,72 @@ def write_output(root, manifest, cfg: Config):
         handle.write(md_content)
 
 
+def build_agents_markdown(cfg: Config):
+    return "\n".join([
+        "# Agent Guide",
+        "",
+        "This project uses IntelScan workspace memory files to help agents get oriented quickly.",
+        "",
+        "## Start Here",
+        "",
+        f"- Read `{cfg.output_md}` first when it exists.",
+        f"- Use `{cfg.output_json}` for machine-readable workspace metadata.",
+        "- Refresh the workspace memory after significant edits, branch changes, or generated-file updates.",
+        "",
+        "## Refresh Commands",
+        "",
+        "Run a one-time refresh:",
+        "",
+        "```bash",
+        "intelscan --root .",
+        "```",
+        "",
+        "Run in watch mode while editing:",
+        "",
+        "```bash",
+        "intelscan --root . --watch",
+        "```",
+        "",
+        "Run an agent command with automatic refresh:",
+        "",
+        "```bash",
+        'intelscan-agent --root . --agent-cmd "python your_agent_task.py"',
+        "```",
+        "",
+        "## Generated Files",
+        "",
+        "Do not manually maintain these generated files:",
+        "",
+        f"- `{cfg.output_json}`",
+        f"- `{cfg.output_md}`",
+        "",
+        "`graphify-out/` may be managed by other tooling and should be treated as external generated context.",
+        "",
+        "## Agent Notes",
+        "",
+        "- Prefer the generated workspace memory before broad file-by-file scanning.",
+        "- Keep generated files out of commits unless the project explicitly chooses otherwise.",
+        "- Preserve project-specific instructions in this file when editing it.",
+    ])
+
+
+def write_agents_guide(root, cfg: Config, agents_md=AGENTS_MD):
+    agents_path = resolve_output_target(root, agents_md, "--agents-md")
+    if agents_path.exists() or agents_path.is_symlink():
+        return False
+    os.makedirs(agents_path.parent, exist_ok=True)
+    with agents_path.open("w", encoding="utf-8") as handle:
+        handle.write(build_agents_markdown(cfg))
+    return True
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate workspace metadata manifest and markdown summary.")
     parser.add_argument("--root", default=".", help="Workspace root directory to scan")
     parser.add_argument("--output-json", default=OUTPUT_JSON, help="Structured manifest filename")
     parser.add_argument("--output-md", default=OUTPUT_MD, help="Markdown summary filename")
+    parser.add_argument("--agents-md", default=AGENTS_MD, help="Agent guide filename used with --init-agents")
+    parser.add_argument("--init-agents", action="store_true", help="Create AGENTS.md if it does not already exist")
     parser.add_argument("--exclude-dir", action="append", default=[], help="Additional directory names to exclude from scanning")
     parser.add_argument("--watch", action="store_true", help="Run continuously and regenerate manifest on workspace changes")
     parser.add_argument("--watch-interval", type=float, default=3.0, help="Seconds between polling cycles in watch mode")
@@ -507,6 +569,16 @@ def main():
         validate_config(root, cfg, args.watch_interval)
     except ValueError as exc:
         raise SystemExit(str(exc))
+
+    if args.init_agents:
+        try:
+            created_agents = write_agents_guide(root, cfg, args.agents_md)
+        except ValueError as exc:
+            raise SystemExit(str(exc))
+        if created_agents:
+            print(f"Generated agent guide: {root / args.agents_md}")
+        else:
+            print(f"Agent guide already exists: {root / args.agents_md}")
 
     print(f"Scanning workspace: {root}")
     scan = collect_files(root, cfg)

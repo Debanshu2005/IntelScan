@@ -98,6 +98,26 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         self.assertTrue((self.root / "workspacememory.md").is_file())
         self.assertFalse((self.root / "graphify-out").exists())
 
+    def test_write_agents_guide_creates_project_agent_file(self):
+        cfg = scanner.Config()
+
+        created = scanner.write_agents_guide(self.root, cfg)
+
+        self.assertTrue(created)
+        content = (self.root / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("intelscan --root .", content)
+        self.assertIn("workspace.json", content)
+        self.assertIn("workspacememory.md", content)
+
+    def test_write_agents_guide_does_not_overwrite_existing_file(self):
+        agents_path = self.root / "AGENTS.md"
+        agents_path.write_text("custom instructions", encoding="utf-8")
+
+        created = scanner.write_agents_guide(self.root, scanner.Config())
+
+        self.assertFalse(created)
+        self.assertEqual("custom instructions", agents_path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

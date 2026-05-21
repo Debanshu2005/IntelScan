@@ -21,7 +21,7 @@ Prerequisites:
 Install from the repository:
 
 ```bash
-git clone (https://github.com/Debanshu2005/IntelScan)
+git clone https://github.com/Debanshu2005/IntelScan
 cd IntelScan
 python -m pip install .
 ```
@@ -31,6 +31,12 @@ After installation, the CLI commands are available:
 ```bash
 intelscan --root .
 intelscan-agent --root . --agent-cmd "python your_agent_task.py"
+```
+
+Create an agent guide in a project:
+
+```bash
+intelscan --root . --init-agents
 ```
 
 For local development without installing globally:
@@ -53,6 +59,12 @@ Run a one-time scan:
 
 ```bash
 intelscan --root .
+```
+
+Create `AGENTS.md` if the project does not already have one:
+
+```bash
+intelscan --root . --init-agents
 ```
 
 Run in watch mode:
