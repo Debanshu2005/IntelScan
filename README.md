@@ -21,7 +21,7 @@ Prerequisites:
 Install from the repository:
 
 ```bash
-git clone <your-repo-url>
+git clone (https://github.com/Debanshu2005/IntelScan)
 cd IntelScan
 python -m pip install .
 ```
