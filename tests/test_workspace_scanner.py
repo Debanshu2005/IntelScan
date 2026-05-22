@@ -1,9 +1,12 @@
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-import workspace_scanner as scanner
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from intelscan import workspace_scanner as scanner
 
 
 class WorkspaceScannerSecurityTests(unittest.TestCase):
@@ -95,12 +98,15 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
                 'version = "0.1.0"',
                 "",
                 "[project.scripts]",
-                'demo = "workspace_scanner:main"',
+                'demo = "intelscan.workspace_scanner:main"',
             ]),
             encoding="utf-8",
         )
-        (self.root / "workspace_scanner.py").write_text("def main():\n    pass\n", encoding="utf-8")
-        (self.root / "test_workspace_scanner.py").write_text("def test_demo():\n    pass\n", encoding="utf-8")
+        (self.root / "src").mkdir()
+        (self.root / "src" / "intelscan").mkdir()
+        (self.root / "src" / "intelscan" / "workspace_scanner.py").write_text("def main():\n    pass\n", encoding="utf-8")
+        (self.root / "tests").mkdir()
+        (self.root / "tests" / "test_workspace_scanner.py").write_text("def test_demo():\n    pass\n", encoding="utf-8")
 
         cfg = scanner.Config()
         scan = scanner.collect_files(self.root, cfg)
@@ -109,11 +115,11 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         self.assertEqual(2, manifest["schemaVersion"])
         self.assertIn("projectStructure", manifest)
         self.assertEqual("Python", manifest["projectStructure"]["primaryStack"])
-        self.assertEqual("flat-root-layout", manifest["projectStructure"]["architectureStyle"])
+        self.assertEqual("package-oriented", manifest["projectStructure"]["architectureStyle"])
         self.assertEqual("demo", manifest["projectStructure"]["entryPoints"][0]["name"])
-        self.assertEqual("workspace_scanner.py", manifest["projectStructure"]["entryPoints"][0]["path"])
+        self.assertEqual("src/intelscan/workspace_scanner.py", manifest["projectStructure"]["entryPoints"][0]["path"])
         self.assertIn("README.md", manifest["projectStructure"]["documentation"])
-        self.assertIn("test_workspace_scanner.py", manifest["projectStructure"]["tests"])
+        self.assertIn("tests/test_workspace_scanner.py", manifest["projectStructure"]["tests"])
 
     def test_build_markdown_includes_project_structure_section(self):
         (self.root / "pyproject.toml").write_text(
@@ -123,11 +129,13 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
                 'version = "0.1.0"',
                 "",
                 "[project.scripts]",
-                'demo = "workspace_scanner:main"',
+                'demo = "intelscan.workspace_scanner:main"',
             ]),
             encoding="utf-8",
         )
-        (self.root / "workspace_scanner.py").write_text("def main():\n    pass\n", encoding="utf-8")
+        (self.root / "src").mkdir()
+        (self.root / "src" / "intelscan").mkdir()
+        (self.root / "src" / "intelscan" / "workspace_scanner.py").write_text("def main():\n    pass\n", encoding="utf-8")
 
         cfg = scanner.Config()
         scan = scanner.collect_files(self.root, cfg)
@@ -136,10 +144,10 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         markdown = scanner.build_markdown(manifest, cfg)
 
         self.assertIn("## Project Structure", markdown)
-        self.assertIn("- Architecture summary: Python project with a flat root-level layout.", markdown)
+        self.assertIn("- Architecture summary: Python project with a package-oriented layout.", markdown)
         self.assertIn("Packaging and CLI entry points are configured in `pyproject.toml`.", markdown)
-        self.assertIn("- Entry point: `demo` -> `workspace_scanner:main` via `workspace_scanner.py`", markdown)
-        self.assertIn("- Component: `workspace_scanner.py` - workspace scanning and manifest generation", markdown)
+        self.assertIn("- Entry point: `demo` -> `intelscan.workspace_scanner:main` via `src/intelscan/workspace_scanner.py`", markdown)
+        self.assertIn("- Component: `src/intelscan/workspace_scanner.py` - workspace scanning and manifest generation", markdown)
 
     def test_write_output_creates_only_root_manifest_files(self):
         cfg = scanner.Config()

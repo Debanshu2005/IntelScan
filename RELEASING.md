@@ -33,7 +33,7 @@ PyPI docs:
 
 ```bash
 python -m unittest -q
-python -m py_compile workspace_scanner.py agent_coordinator.py
+python -m py_compile workspace_scanner.py agent_coordinator.py src/intelscan/workspace_scanner.py src/intelscan/agent_coordinator.py
 ```
 
 3. Build distributions:

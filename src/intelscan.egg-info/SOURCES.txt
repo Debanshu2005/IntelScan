@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+src/intelscan/__init__.py
+src/intelscan/__main__.py
+src/intelscan/agent_coordinator.py
+src/intelscan/workspace_scanner.py
+src/intelscan.egg-info/PKG-INFO
+src/intelscan.egg-info/SOURCES.txt
+src/intelscan.egg-info/dependency_links.txt
+src/intelscan.egg-info/entry_points.txt
+src/intelscan.egg-info/top_level.txt
+tests/test_workspace_scanner.py

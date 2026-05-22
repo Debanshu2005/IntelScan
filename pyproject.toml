@@ -28,8 +28,11 @@ Repository = "https://github.com/Debanshu2005/IntelScan"
 Issues = "https://github.com/Debanshu2005/IntelScan/issues"
 
 [project.scripts]
-intelscan = "workspace_scanner:main"
-intelscan-agent = "agent_coordinator:main"
+intelscan = "intelscan.workspace_scanner:main"
+intelscan-agent = "intelscan.agent_coordinator:main"
 
 [tool.setuptools]
-py-modules = ["workspace_scanner", "agent_coordinator"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

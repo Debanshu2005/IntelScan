@@ -35,7 +35,7 @@ python -m unittest -q
 Compile-check scripts:
 
 ```bash
-python -m py_compile workspace_scanner.py agent_coordinator.py
+python -m py_compile workspace_scanner.py agent_coordinator.py src/intelscan/workspace_scanner.py src/intelscan/agent_coordinator.py
 ```
 
 Run a one-time scan:
@@ -84,6 +84,7 @@ Clean up temporary build or install folders after verification.
 
 - Keep output writes constrained to the workspace root.
 - Keep symlink handling conservative; do not follow symlinked files or directories during scans.
-- Keep `agent_coordinator.py` usable both from the source tree and from an installed package.
+- Keep `src/intelscan/agent_coordinator.py` usable both from the source tree and from an installed package.
+- The repository uses a `src/intelscan/` package layout; the root Python files are thin source-tree launchers.
 - Preserve Python 3.8 compatibility unless `pyproject.toml` is intentionally updated.
 - Prefer focused changes over broad refactors; this repo is intentionally small.

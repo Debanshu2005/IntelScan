@@ -22,6 +22,8 @@ Run from the repository root:
 python workspace_scanner.py --root .
 ```
 
+The real implementation lives in `src/intelscan/workspace_scanner.py`. The root `workspace_scanner.py` file is a thin launcher for source-tree development.
+
 Run in watch mode to keep the summary files updated automatically when repository files change:
 
 ```bash
