@@ -1,11 +1,15 @@
 # Releasing IntelScan
 
-This project is already packageable with `pip`, and the local wheel build is working.
-
-Once the project is published on PyPI, users will be able to install it with:
+IntelScan `0.1.0` is now published on PyPI and installable with:
 
 ```bash
 pip install intelscan
+```
+
+Install that exact first public release with:
+
+```bash
+pip install intelscan==0.1.0
 ```
 
 ## One-time setup
@@ -66,6 +70,7 @@ GitHub Actions Trusted Publishing:
 
 ## Notes
 
+- `0.1.0` is the first published PyPI release for this project.
 - PyPI requires each uploaded release to have a new version number.
 - `twine check` catches common README and metadata issues before upload.
 - Trusted Publishing is the recommended PyPI flow because it avoids long-lived API tokens.

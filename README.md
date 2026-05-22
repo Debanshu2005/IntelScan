@@ -20,18 +20,24 @@ Prerequisites:
 - Python 3.8+
 - Git on `PATH` if they want Git metadata included in the generated summary
 
-Install from the repository:
+Install from PyPI:
+
+```bash
+pip install intelscan
+```
+
+Install a specific released version:
+
+```bash
+pip install intelscan==0.1.0
+```
+
+Install from the repository for local development:
 
 ```bash
 git clone https://github.com/Debanshu2005/IntelScan
 cd IntelScan
 python -m pip install .
-```
-
-After the first PyPI release, users will also be able to install it directly with:
-
-```bash
-pip install intelscan
 ```
 
 After installation, the CLI commands are available:
