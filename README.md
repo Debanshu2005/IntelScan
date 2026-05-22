@@ -9,6 +9,8 @@ It scans the repository, generates a structured manifest, and writes a human-rea
 - `workspace.json` - machine-readable workspace metadata
 - `workspacememory.md` - human-readable workspace summary
 
+The generated outputs also include an inferred project structure section so agents can quickly see the repo layout, entry points, and major components.
+
 These files are generated at the project root and are ignored by git.
 
 ## Installation

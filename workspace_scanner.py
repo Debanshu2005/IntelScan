@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 OUTPUT_JSON = "workspace.json"
 OUTPUT_MD = "workspacememory.md"
 AGENTS_MD = "AGENTS.md"
@@ -61,6 +61,24 @@ TEXT_EXTENSIONS = {
     ".cfg",
     ".dockerfile",
 }
+
+SOURCE_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".java",
+    ".cs",
+    ".go",
+    ".rs",
+}
+
+GENERATED_DIR_HINTS = {"dist", "build", "coverage", "htmlcov", "graphify-out"}
+DOC_DIR_HINTS = {"docs", "doc"}
+TEST_DIR_HINTS = {"tests", "test", "spec", "specs"}
+SOURCE_DIR_HINTS = {"src", "lib", "app", "server", "client", "pkg"}
+CONFIG_DIR_HINTS = {".github", ".vscode", ".devcontainer"}
 
 
 def to_iso(dt):
@@ -193,6 +211,35 @@ def find_package_metadata(root):
     return metadata
 
 
+def read_project_scripts(root, package_metadata):
+    if "pyproject.toml" not in package_metadata.get("files", []):
+        return []
+
+    pyproject_path = root / "pyproject.toml"
+    try:
+        content = pyproject_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    scripts = []
+    in_scripts = False
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_scripts = line == "[project.scripts]"
+            continue
+        if not in_scripts or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        scripts.append({
+            "name": name.strip(),
+            "target": value.strip().strip('"').strip("'"),
+        })
+    return scripts
+
+
 def collect_files(root, cfg: Config):
     file_inventory = []
     extension_counts = Counter()
@@ -291,7 +338,202 @@ def summarize_recent_changes(root, file_inventory):
     return changes[:50]
 
 
+def is_test_path(path):
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    filename = parts[-1].lower()
+    stem = Path(filename).stem
+    return (
+        any(part.lower() in TEST_DIR_HINTS for part in parts[:-1])
+        or filename.startswith("test_")
+        or filename.endswith("_test.py")
+        or stem.endswith("_test")
+    )
+
+
+def infer_component_role(path):
+    normalized = path.replace("\\", "/")
+    name = Path(normalized).name.lower()
+    stem = Path(normalized).stem.lower()
+    if is_test_path(normalized):
+        return "automated tests"
+    if name.endswith(".md") or name in {"readme", "license"}:
+        return "documentation"
+    if "scanner" in stem:
+        return "workspace scanning and manifest generation"
+    if "coordinator" in stem:
+        return "agent command orchestration and refresh flow"
+    if "config" in stem or "settings" in stem:
+        return "configuration"
+    if "cli" in stem or stem == "main":
+        return "command-line entry point"
+    if name in {"pyproject.toml", "package.json", "cargo.toml", "go.mod"}:
+        return "packaging and project metadata"
+    return "source module"
+
+
+def infer_area_kind(area_name, member_paths):
+    lower_name = area_name.lower()
+    if area_name == "[root]":
+        return "workspace-root"
+    if lower_name.endswith(".egg-info") or lower_name in GENERATED_DIR_HINTS:
+        return "generated"
+    if lower_name in DOC_DIR_HINTS:
+        return "documentation"
+    if lower_name in TEST_DIR_HINTS or any(is_test_path(path) for path in member_paths):
+        return "tests"
+    if lower_name in SOURCE_DIR_HINTS:
+        return "source"
+    if lower_name in CONFIG_DIR_HINTS:
+        return "configuration"
+    return "mixed"
+
+
+def infer_area_purpose(area_name, kind):
+    if kind == "workspace-root":
+        return "Primary repository root containing the main source files, documentation, tests, and project metadata."
+    if kind == "generated":
+        return "Generated artifacts or package metadata rather than hand-maintained source."
+    if kind == "documentation":
+        return "Documentation and onboarding material."
+    if kind == "tests":
+        return "Automated tests and validation helpers."
+    if kind == "source":
+        return "Primary implementation code."
+    if kind == "configuration":
+        return "Tooling and editor configuration."
+    return f"Top-level workspace area for `{area_name}`."
+
+
+def detect_primary_stack(package_metadata, file_inventory):
+    package_files = set(package_metadata.get("files", []))
+    if {"pyproject.toml", "requirements.txt", "Pipfile"} & package_files:
+        return "Python"
+    if "package.json" in package_files:
+        return "JavaScript/TypeScript"
+    if "Cargo.toml" in package_files:
+        return "Rust"
+    if "go.mod" in package_files:
+        return "Go"
+
+    extensions = {item["extension"] for item in file_inventory}
+    if ".py" in extensions:
+        return "Python"
+    if {".js", ".ts", ".tsx", ".jsx"} & extensions:
+        return "JavaScript/TypeScript"
+    if ".rs" in extensions:
+        return "Rust"
+    if ".go" in extensions:
+        return "Go"
+    return "Mixed-language"
+
+
+def infer_architecture_style(area_counts, source_files):
+    area_names = set(area_counts)
+    if area_names & SOURCE_DIR_HINTS:
+        return "package-oriented"
+    if all("/" not in path for path in source_files) and source_files:
+        return "flat-root-layout"
+    if source_files:
+        return "mixed-layout"
+    return "undetermined"
+
+
+def build_architecture_overview(primary_stack, architecture_style, package_metadata, areas):
+    style_phrases = {
+        "package-oriented": "a package-oriented layout",
+        "flat-root-layout": "a flat root-level layout",
+        "mixed-layout": "a mixed layout",
+        "undetermined": "an undetermined layout",
+    }
+    generated_areas = [area for area in areas if area["kind"] == "generated"]
+    overview = f"{primary_stack} project with {style_phrases.get(architecture_style, 'a mixed layout')}."
+    if any(area["path"] == "[root]" for area in areas):
+        overview += " Core source, docs, tests, and project metadata are organized from the repository root."
+    if "pyproject.toml" in package_metadata.get("files", []):
+        overview += " Packaging and CLI entry points are configured in `pyproject.toml`."
+    if generated_areas:
+        overview += " Generated artifacts are kept separate from the main source areas."
+    return overview
+
+
+def build_project_structure(root, file_inventory, package_metadata):
+    file_paths = [item["path"] for item in file_inventory]
+    area_members = {}
+    for path in file_paths:
+        area_name = path.split("/", 1)[0] if "/" in path else "[root]"
+        area_members.setdefault(area_name, []).append(path)
+
+    area_counts = {name: len(paths) for name, paths in area_members.items()}
+    sorted_areas = sorted(area_members, key=lambda name: (name != "[root]", name.lower()))
+    areas = []
+    for area_name in sorted_areas[:20]:
+        member_paths = sorted(area_members[area_name])
+        kind = infer_area_kind(area_name, member_paths)
+        areas.append({
+            "path": area_name,
+            "kind": kind,
+            "fileCount": len(member_paths),
+            "purpose": infer_area_purpose(area_name, kind),
+            "examples": member_paths[:5],
+        })
+
+    docs = [path for path in file_paths if path.lower().endswith(".md")][:10]
+    tests = [path for path in file_paths if is_test_path(path)][:10]
+    source_files = [
+        item["path"]
+        for item in file_inventory
+        if item["extension"] in SOURCE_EXTENSIONS and not is_test_path(item["path"])
+    ]
+
+    components = []
+    for path in sorted(source_files)[:12]:
+        components.append({
+            "path": path,
+            "kind": "source",
+            "role": infer_component_role(path),
+        })
+
+    for path in sorted(
+        item["path"] for item in file_inventory if item["path"] in {"pyproject.toml", "package.json", "Cargo.toml", "go.mod"}
+    )[:4]:
+        components.append({
+            "path": path,
+            "kind": "metadata",
+            "role": infer_component_role(path),
+        })
+
+    entry_points = []
+    for script in read_project_scripts(root, package_metadata):
+        module_name = script["target"].split(":", 1)[0]
+        module_path = module_name.replace(".", "/") + ".py"
+        if module_path not in file_paths:
+            module_path = ""
+        entry_points.append({
+            "name": script["name"],
+            "target": script["target"],
+            "path": module_path,
+            "kind": "cli",
+        })
+
+    primary_stack = detect_primary_stack(package_metadata, file_inventory)
+    architecture_style = infer_architecture_style(area_counts, source_files)
+    overview = build_architecture_overview(primary_stack, architecture_style, package_metadata, areas)
+
+    return {
+        "overview": overview,
+        "architectureStyle": architecture_style,
+        "primaryStack": primary_stack,
+        "entryPoints": entry_points,
+        "areas": areas,
+        "components": components,
+        "documentation": docs,
+        "tests": tests,
+    }
+
+
 def build_manifest(root, scan, cfg: Config, refresh_reason="scan"):
+    package_metadata = find_package_metadata(root)
     manifest = {
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": to_iso(datetime.now(timezone.utc)),
@@ -318,7 +560,8 @@ def build_manifest(root, scan, cfg: Config, refresh_reason="scan"):
                 "fileInventory": scan["fileInventory"],
             },
         },
-        "package": find_package_metadata(root),
+        "package": package_metadata,
+        "projectStructure": build_project_structure(root, scan["fileInventory"], package_metadata),
         "currentStack": {
             "lastActivityAt": "",
             "trackedChangeCount": 0,
@@ -408,6 +651,26 @@ def build_markdown(manifest, cfg: Config):
     git = manifest["git"]
     package = manifest["package"]
     changes = manifest["recentChanges"]
+    structure = manifest.get("projectStructure", {})
+    entry_points = structure.get("entryPoints", [])
+    areas = structure.get("areas", [])
+    components = structure.get("components", [])
+
+    entry_point_lines = [
+        f"- Entry point: {format_code_span(item['name'])} -> {format_code_span(item['target'])}"
+        + (f" via {format_code_span(item['path'])}" if item.get("path") else "")
+        for item in entry_points[:10]
+    ] or ["- Entry points: none detected."]
+
+    area_lines = [
+        f"- Area: {format_code_span(area['path'])} ({area['fileCount']} files, {area['kind']}) - {area['purpose']}"
+        for area in areas[:8]
+    ] or ["- Major areas: none detected."]
+
+    component_lines = [
+        f"- Component: {format_code_span(component['path'])} - {component['role']}"
+        for component in components[:8]
+    ] or ["- Components: none detected."]
 
     recent_lines = [
         f"- {format_code_span(c['path'])} (modified {format_code_span(c['modifiedAt'])}, {c['ageDays']} days ago)"
@@ -450,6 +713,14 @@ def build_markdown(manifest, cfg: Config):
         f"- Total files: {workspace['stats']['totalFiles']}",
         f"- Primary file types: {', '.join(format_code_span(file_type) for file_type in workspace['stats']['primaryFileTypes']) or 'none detected.'}",
         f"- Top-level areas: {', '.join(format_code_span(area) for area in workspace['stats']['topLevelAreas']) or 'none detected.'}",
+        "",
+        "## Project Structure",
+        f"- Architecture summary: {structure.get('overview', 'No structure summary detected.')}",
+        f"- Architecture style: {format_code_span(structure.get('architectureStyle'))}",
+        f"- Primary stack: {format_code_span(structure.get('primaryStack'))}",
+        *entry_point_lines,
+        *area_lines,
+        *component_lines,
         "",
         "## Package Snapshot",
         (

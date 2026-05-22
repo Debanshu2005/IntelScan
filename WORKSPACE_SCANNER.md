@@ -6,7 +6,7 @@ A standalone workspace scanner for generating repository metadata that agents ca
 
 - Scans the workspace root and builds a structured JSON manifest.
 - Writes a human-readable markdown summary alongside the JSON file.
-- Captures workspace statistics, package manifest detection, file inventory, recent changes, and Git status when available.
+- Captures workspace statistics, package manifest detection, file inventory, inferred project structure, recent changes, and Git status when available.
 
 ## Why this helps
 
