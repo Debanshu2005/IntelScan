@@ -28,6 +28,12 @@ cd IntelScan
 python -m pip install .
 ```
 
+After the first PyPI release, users will also be able to install it directly with:
+
+```bash
+pip install intelscan
+```
+
 After installation, the CLI commands are available:
 
 ```bash
@@ -92,3 +98,7 @@ If you use VS Code, run these from `Terminal -> Run Task`:
 
 - The scanner ignores symlinks and keeps output writes inside the workspace root.
 - Git metadata is included when available, with safe non-interactive Git calls.
+
+## Publishing
+
+Release notes for PyPI are in [RELEASING.md](RELEASING.md). The repo also includes a GitHub Actions workflow for PyPI Trusted Publishing at `.github/workflows/publish.yml`.

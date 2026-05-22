@@ -2,3 +2,6 @@ workspace.json
 workspacememory.md
 graphify-out/
 __pycache__/
+build/
+dist/
+.tmp_wheelhouse/

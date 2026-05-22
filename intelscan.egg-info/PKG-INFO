@@ -51,6 +51,8 @@ It scans the repository, generates a structured manifest, and writes a human-rea
 - `workspace.json` - machine-readable workspace metadata
 - `workspacememory.md` - human-readable workspace summary
 
+The generated outputs also include an inferred project structure section so agents can quickly see the repo layout, entry points, and major components.
+
 These files are generated at the project root and are ignored by git.
 
 ## Installation
@@ -66,6 +68,12 @@ Install from the repository:
 git clone https://github.com/Debanshu2005/IntelScan
 cd IntelScan
 python -m pip install .
+```
+
+After the first PyPI release, users will also be able to install it directly with:
+
+```bash
+pip install intelscan
 ```
 
 After installation, the CLI commands are available:
@@ -132,3 +140,7 @@ If you use VS Code, run these from `Terminal -> Run Task`:
 
 - The scanner ignores symlinks and keeps output writes inside the workspace root.
 - Git metadata is included when available, with safe non-interactive Git calls.
+
+## Publishing
+
+Release notes for PyPI are in [RELEASING.md](RELEASING.md). The repo also includes a GitHub Actions workflow for PyPI Trusted Publishing at `.github/workflows/publish.yml`.
