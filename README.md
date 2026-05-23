@@ -47,7 +47,7 @@ intelscan --root .
 intelscan-agent --root . --agent-cmd "python your_agent_task.py"
 ```
 
-Create an agent guide in a project:
+Create agent guide files in a project:
 
 ```bash
 intelscan --root . --init-agents
@@ -79,11 +79,19 @@ Run a one-time scan:
 intelscan --root .
 ```
 
-Create `AGENTS.md` if the project does not already have one:
+Create `AGENTS.md` plus companion agent instruction files when they do not already exist:
 
 ```bash
 intelscan --root . --init-agents
 ```
+
+This creates `AGENTS.md` as the canonical shared guide and also bootstraps companion files for common agent ecosystems:
+
+- `CLAUDE.md`
+- `GEMINI.md`
+- `.github/copilot-instructions.md`
+
+Existing files are preserved and never overwritten.
 
 Run in watch mode:
 

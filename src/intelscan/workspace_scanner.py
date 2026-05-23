@@ -15,6 +15,9 @@ SCHEMA_VERSION = 2
 OUTPUT_JSON = "workspace.json"
 OUTPUT_MD = "workspacememory.md"
 AGENTS_MD = "AGENTS.md"
+CLAUDE_MD = "CLAUDE.md"
+GEMINI_MD = "GEMINI.md"
+COPILOT_INSTRUCTIONS_MD = ".github/copilot-instructions.md"
 GIT_COMMAND_TIMEOUT_SECONDS = 5
 
 PACKAGE_FILES = [
@@ -31,6 +34,11 @@ PACKAGE_FILES = [
 ]
 
 EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", "target", "build", ".venv", "venv"}
+DEFAULT_COMPANION_AGENT_GUIDES = (
+    CLAUDE_MD,
+    GEMINI_MD,
+    COPILOT_INSTRUCTIONS_MD,
+)
 
 
 @dataclass
@@ -817,14 +825,74 @@ def build_agents_markdown(cfg: Config):
     ])
 
 
+def build_companion_agent_markdown(guide_path, cfg: Config, agents_md=AGENTS_MD):
+    if guide_path == CLAUDE_MD:
+        title = "# Claude AI Instructions"
+        agent_name = "Claude Code"
+    elif guide_path == GEMINI_MD:
+        title = "# Gemini AI Instructions"
+        agent_name = "Gemini CLI"
+    elif guide_path == COPILOT_INSTRUCTIONS_MD:
+        title = "# GitHub Copilot Instructions"
+        agent_name = "GitHub Copilot"
+    else:
+        title = "# AI Agent Instructions"
+        agent_name = "this agent"
+
+    return "\n".join([
+        title,
+        "",
+        f"This repository uses `{agents_md}` as the canonical shared guide for AI-assisted development workflows.",
+        f"Start by reading `{agents_md}` when it is available, then follow the generated workspace context below in {agent_name}.",
+        "",
+        "## Context Priority",
+        "",
+        f"1. Read `{cfg.output_json}` first when it exists.",
+        "2. Read `graphify-out/GRAPH_REPORT.md` next when it exists.",
+        f"3. Read `graphify-out/WORKSPACE_MEMORY.md` and `{cfg.output_md}` after that when they exist.",
+        "",
+        "## Working Notes",
+        "",
+        f"- Treat `{cfg.output_json}` and `{cfg.output_md}` as generated files.",
+        "- Do not manually maintain `graphify-out/` or `__pycache__/`.",
+        "- Keep output writes constrained to the workspace root.",
+        "- Do not follow symlinked files or directories during scans.",
+        "",
+        "## Common Commands",
+        "",
+        "```bash",
+        "python -m unittest -q",
+        "python workspace_scanner.py --root .",
+        'python agent_coordinator.py --root . --agent-cmd "python --version"',
+        "```",
+    ])
+
+
+def write_text_file_if_missing(path: Path, content: str):
+    if path.exists() or path.is_symlink():
+        return False
+    os.makedirs(path.parent, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(content)
+    return True
+
+
 def write_agents_guide(root, cfg: Config, agents_md=AGENTS_MD):
     agents_path = resolve_output_target(root, agents_md, "--agents-md")
-    if agents_path.exists() or agents_path.is_symlink():
-        return False
-    os.makedirs(agents_path.parent, exist_ok=True)
-    with agents_path.open("w", encoding="utf-8") as handle:
-        handle.write(build_agents_markdown(cfg))
-    return True
+    return write_text_file_if_missing(agents_path, build_agents_markdown(cfg))
+
+
+def write_companion_agent_guides(root, cfg: Config, agents_md=AGENTS_MD, companion_guides=DEFAULT_COMPANION_AGENT_GUIDES):
+    created_paths = []
+    for guide_path in companion_guides:
+        resolved_path = resolve_output_target(root, guide_path, "--init-agents")
+        created = write_text_file_if_missing(
+            resolved_path,
+            build_companion_agent_markdown(guide_path, cfg, agents_md),
+        )
+        if created:
+            created_paths.append(resolved_path)
+    return created_paths
 
 
 def parse_args():
@@ -856,12 +924,15 @@ def main():
     if args.init_agents:
         try:
             created_agents = write_agents_guide(root, cfg, args.agents_md)
+            created_companions = write_companion_agent_guides(root, cfg, args.agents_md)
         except ValueError as exc:
             raise SystemExit(str(exc))
         if created_agents:
             print(f"Generated agent guide: {root / args.agents_md}")
         else:
             print(f"Agent guide already exists: {root / args.agents_md}")
+        for companion_path in created_companions:
+            print(f"Generated companion guide: {companion_path}")
 
     print(f"Scanning workspace: {root}")
     scan = collect_files(root, cfg)

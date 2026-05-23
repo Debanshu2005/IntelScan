@@ -41,6 +41,8 @@ python workspace_scanner.py --root . --output-json workspace.json --output-md wo
 - `workspace.json` - machine-readable workspace manifest.
 - `workspacememory.md` - human-readable workspace summary.
 
+Use `--init-agents` to bootstrap a canonical `AGENTS.md` plus companion instruction files for `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` when those files are missing.
+
 ## Agent integration pattern
 
 1. Before broad repo scanning, agents should read `workspace.json` and `workspacememory.md`.

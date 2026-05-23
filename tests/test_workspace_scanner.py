@@ -181,6 +181,46 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         self.assertFalse(created)
         self.assertEqual("custom instructions", agents_path.read_text(encoding="utf-8"))
 
+    def test_write_companion_agent_guides_creates_known_agent_files(self):
+        cfg = scanner.Config()
+
+        created_paths = scanner.write_companion_agent_guides(self.root, cfg)
+
+        self.assertEqual(
+            [
+                self.root / "CLAUDE.md",
+                self.root / "GEMINI.md",
+                self.root / ".github" / "copilot-instructions.md",
+            ],
+            created_paths,
+        )
+        self.assertIn("AGENTS.md", (self.root / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertIn("workspace.json", (self.root / "GEMINI.md").read_text(encoding="utf-8"))
+        self.assertIn("GitHub Copilot", (self.root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8"))
+
+    def test_write_companion_agent_guides_respects_custom_agents_path(self):
+        cfg = scanner.Config()
+
+        scanner.write_companion_agent_guides(self.root, cfg, agents_md="docs/AGENTS.md")
+
+        content = (self.root / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertIn("`docs/AGENTS.md`", content)
+
+    def test_write_companion_agent_guides_do_not_overwrite_existing_files(self):
+        claude_path = self.root / "CLAUDE.md"
+        claude_path.write_text("existing claude instructions", encoding="utf-8")
+
+        created_paths = scanner.write_companion_agent_guides(self.root, scanner.Config())
+
+        self.assertEqual(
+            [
+                self.root / "GEMINI.md",
+                self.root / ".github" / "copilot-instructions.md",
+            ],
+            created_paths,
+        )
+        self.assertEqual("existing claude instructions", claude_path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
