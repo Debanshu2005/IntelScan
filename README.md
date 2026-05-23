@@ -1,5 +1,6 @@
-# IntelScan
+<img width="1408" height="601" alt="IntelScan" src="https://github.com/user-attachments/assets/8ceb7a09-f93f-447c-944a-7b64a0485598" />
 
+# IntelScan - Efficient Reconnaissance Processing
 IntelScan is a lightweight workspace-summary tool for AI-assisted development workflows.
 
 It scans the repository, generates a structured manifest, and writes a human-readable memory file so agents can understand the repo without rescanning everything from scratch.
