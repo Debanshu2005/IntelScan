@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: intelscan
-Version: 0.1.0
+Version: 0.1.1
 Summary: Workspace summary generator for AI-assisted development workflows.
 Author: IntelScan contributors
 License: MIT License
@@ -40,8 +40,9 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Dynamic: license-file
 
-# IntelScan
+<img width="1408" height="601" alt="IntelScan" src="https://github.com/user-attachments/assets/8ceb7a09-f93f-447c-944a-7b64a0485598" />
 
+# IntelScan - Efficient Reconnaissance Processing
 IntelScan is a lightweight workspace-summary tool for AI-assisted development workflows.
 
 It scans the repository, generates a structured manifest, and writes a human-readable memory file so agents can understand the repo without rescanning everything from scratch.
@@ -62,18 +63,24 @@ Prerequisites:
 - Python 3.8+
 - Git on `PATH` if they want Git metadata included in the generated summary
 
-Install from the repository:
+Install from PyPI:
+
+```bash
+pip install intelscan
+```
+
+Install a specific released version:
+
+```bash
+pip install intelscan==0.1.0
+```
+
+Install from the repository for local development:
 
 ```bash
 git clone https://github.com/Debanshu2005/IntelScan
 cd IntelScan
 python -m pip install .
-```
-
-After the first PyPI release, users will also be able to install it directly with:
-
-```bash
-pip install intelscan
 ```
 
 After installation, the CLI commands are available:
@@ -83,7 +90,7 @@ intelscan --root .
 intelscan-agent --root . --agent-cmd "python your_agent_task.py"
 ```
 
-Create an agent guide in a project:
+Create agent guide files in a project:
 
 ```bash
 intelscan --root . --init-agents
@@ -115,11 +122,19 @@ Run a one-time scan:
 intelscan --root .
 ```
 
-Create `AGENTS.md` if the project does not already have one:
+Create `AGENTS.md` plus companion agent instruction files when they do not already exist:
 
 ```bash
 intelscan --root . --init-agents
 ```
+
+This creates `AGENTS.md` as the canonical shared guide and also bootstraps companion files for common agent ecosystems:
+
+- `CLAUDE.md`
+- `GEMINI.md`
+- `.github/copilot-instructions.md`
+
+Existing files are preserved and never overwritten.
 
 Run in watch mode:
 
