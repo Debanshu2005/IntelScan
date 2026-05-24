@@ -1,8 +1,9 @@
 <img width="1408" height="601" alt="IntelScan" src="https://github.com/user-attachments/assets/8ceb7a09-f93f-447c-944a-7b64a0485598" />
 
-# IntelScan
+# IntelScan 
 
 IntelScan is a lightweight workspace-summary tool for AI-assisted development workflows.
+https://pypi.org/project/intelscan
 
 It scans a repository, writes a structured manifest for tools, and generates a human-readable memory file so future agent passes can understand the project without rescanning everything from scratch.
 
