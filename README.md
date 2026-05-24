@@ -6,6 +6,8 @@ IntelScan is a lightweight workspace-summary tool for AI-assisted development wo
 
 It scans a repository, writes a structured manifest for tools, and generates a human-readable memory file so future agent passes can understand the project without rescanning everything from scratch.
 
+By default, scans skip common large/generated folders such as `.git`, `node_modules`, `.venv`, and `__pycache__`. IntelScan also loads `.intelscanignore` and respects `.gitignore` when present.
+
 ## What it generates
 
 - `workspace.json` - machine-readable workspace metadata
@@ -73,6 +75,8 @@ Run an agent command with automatic manifest refresh before and after the pass:
 intelscan-agent --root . --agent-cmd "python your_agent_task.py"
 ```
 
+The coordinator also exports `INTELSCAN_WORKSPACE_ROOT`, `INTELSCAN_WORKSPACE_JSON`, and `INTELSCAN_WORKSPACE_MD` for agent wrappers that want to consume the generated context automatically.
+
 For source-tree development without installing globally:
 
 ```bash
@@ -100,6 +104,7 @@ intelscan --root .
 intelscan --root . --watch
 intelscan --root . --output-json workspace.json --output-md workspacememory.md
 intelscan --root . --exclude-dir .cache
+intelscan --root . --max-depth 4 --progress
 ```
 
 Coordinator CLI:
@@ -146,6 +151,8 @@ python -m pip wheel --no-build-isolation --no-deps --wheel-dir .tmp_wheelhouse .
 - Output writes are constrained to the workspace root.
 - Symlinked files and directories are not followed during scans.
 - Git metadata is collected with safe non-interactive commands when Git is available.
+- Use `.intelscanignore` for scanner-specific exclusions, or `--no-gitignore` if you need to ignore `.gitignore` during a scan.
+- Use `--max-depth` and `--progress` when scanning very large repositories or monorepos.
 
 ## Publishing
 

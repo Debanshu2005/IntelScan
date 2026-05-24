@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import fnmatch
 import json
 import os
 import shutil
@@ -10,8 +11,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 OUTPUT_JSON = "workspace.json"
 OUTPUT_MD = "workspacememory.md"
 AGENTS_MD = "AGENTS.md"
@@ -19,6 +21,8 @@ CLAUDE_MD = "CLAUDE.md"
 GEMINI_MD = "GEMINI.md"
 COPILOT_INSTRUCTIONS_MD = ".github/copilot-instructions.md"
 GIT_COMMAND_TIMEOUT_SECONDS = 5
+DEFAULT_IGNORE_FILES = (".intelscanignore",)
+DEFAULT_PROGRESS_EVERY = 500
 
 PACKAGE_FILES = [
     "package.json",
@@ -46,6 +50,51 @@ class Config:
     output_json: str = OUTPUT_JSON
     output_md: str = OUTPUT_MD
     exclude_dirs: set = field(default_factory=lambda: set(EXCLUDE_DIRS))
+    ignore_rules: List["IgnoreRule"] = field(default_factory=list)
+    ignore_sources: List[str] = field(default_factory=list)
+    max_depth: Optional[int] = None
+    show_progress: bool = False
+    progress_every: int = DEFAULT_PROGRESS_EVERY
+
+
+@dataclass
+class IgnoreRule:
+    pattern: str
+    source: str
+    negated: bool = False
+    directory_only: bool = False
+    anchored: bool = False
+
+
+@dataclass
+class ProgressReporter:
+    enabled: bool = False
+    report_every: int = DEFAULT_PROGRESS_EVERY
+    file_count: int = 0
+    directory_count: int = 0
+    start_time: float = field(default_factory=time.monotonic)
+    _last_reported_files: int = 0
+
+    def saw_directory(self):
+        if not self.enabled:
+            return
+        self.directory_count += 1
+
+    def saw_file(self):
+        if not self.enabled:
+            return
+        self.file_count += 1
+        if self.file_count - self._last_reported_files >= self.report_every:
+            self._last_reported_files = self.file_count
+            elapsed = max(time.monotonic() - self.start_time, 0.001)
+            rate = self.file_count / elapsed
+            print(
+                "Scan progress:"
+                f" {self.file_count} files across {self.directory_count} directories"
+                f" ({rate:.0f} files/sec)"
+            )
+
+
 TEXT_EXTENSIONS = {
     ".py",
     ".js",
@@ -98,7 +147,10 @@ def collapse_whitespace(value):
 
 
 def format_code_span(value, fallback="none"):
-    text = collapse_whitespace(value)
+    if value is None:
+        text = fallback
+    else:
+        text = collapse_whitespace(value)
     if not text:
         text = fallback
     return "`" + text.replace("`", "'") + "`"
@@ -110,6 +162,143 @@ def is_relative_to(path, parent):
         return True
     except ValueError:
         return False
+
+
+def normalize_rel_path(value):
+    normalized = str(value).replace("\\", "/").strip()
+    return normalized.strip("/")
+
+
+def path_depth(rel_path):
+    normalized = normalize_rel_path(rel_path)
+    if not normalized:
+        return 0
+    return len(normalized.split("/")) - 1
+
+
+def iter_suffixes(rel_path):
+    normalized = normalize_rel_path(rel_path)
+    if not normalized:
+        return [""]
+    parts = normalized.split("/")
+    return ["/".join(parts[index:]) for index in range(len(parts))]
+
+
+def iter_ancestor_dirs(rel_path):
+    normalized = normalize_rel_path(rel_path)
+    if not normalized:
+        return []
+    parts = normalized.split("/")
+    ancestors = []
+    for index in range(1, len(parts)):
+        ancestors.append("/".join(parts[:index]))
+    return ancestors
+
+
+def parse_ignore_file(ignore_path, root):
+    rules = []
+    relative_source = ignore_path.relative_to(root).as_posix()
+    try:
+        lines = ignore_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return rules
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        negated = line.startswith("!")
+        if negated:
+            line = line[1:].strip()
+        if not line:
+            continue
+        directory_only = line.endswith("/")
+        if directory_only:
+            line = line[:-1]
+        anchored = line.startswith("/")
+        if anchored:
+            line = line[1:]
+        pattern = normalize_rel_path(line)
+        if not pattern:
+            continue
+        rules.append(
+            IgnoreRule(
+                pattern=pattern,
+                source=relative_source,
+                negated=negated,
+                directory_only=directory_only,
+                anchored=anchored,
+            )
+        )
+    return rules
+
+
+def load_ignore_rules(root, include_gitignore=True, additional_ignore_files=None):
+    ignore_rules = []
+    ignore_sources = []
+    candidate_files = []
+    if include_gitignore:
+        candidate_files.append(".gitignore")
+    candidate_files.extend(DEFAULT_IGNORE_FILES)
+    if additional_ignore_files:
+        candidate_files.extend(additional_ignore_files)
+
+    seen_sources = set()
+    for candidate in candidate_files:
+        ignore_path = root / candidate
+        stats = safe_stat(ignore_path)
+        if stats is None or not stat.S_ISREG(stats.st_mode):
+            continue
+        source_name = ignore_path.relative_to(root).as_posix()
+        if source_name in seen_sources:
+            continue
+        seen_sources.add(source_name)
+        ignore_sources.append(source_name)
+        ignore_rules.extend(parse_ignore_file(ignore_path, root))
+    return ignore_rules, ignore_sources
+
+
+def matches_ignore_rule(rule: IgnoreRule, rel_path, is_dir):
+    normalized = normalize_rel_path(rel_path)
+    if not normalized:
+        return False
+
+    candidate_paths = [normalized] if rule.anchored else iter_suffixes(normalized)
+    if "/" not in rule.pattern:
+        candidate_paths.extend(normalized.split("/"))
+
+    if rule.directory_only:
+        directory_candidates = [normalized] if is_dir else iter_ancestor_dirs(normalized)
+        for directory_path in directory_candidates:
+            if not directory_path:
+                continue
+            paths = [directory_path] if rule.anchored else iter_suffixes(directory_path)
+            if "/" not in rule.pattern:
+                paths.extend(directory_path.split("/"))
+            if any(fnmatch.fnmatchcase(candidate, rule.pattern) for candidate in paths):
+                return True
+
+    return any(fnmatch.fnmatchcase(candidate, rule.pattern) for candidate in candidate_paths)
+
+
+def should_ignore_path(rel_path, cfg: Config, is_dir=False):
+    normalized = normalize_rel_path(rel_path)
+    excluded_paths = {
+        normalize_rel_path(cfg.output_json),
+        normalize_rel_path(cfg.output_md),
+    }
+    if normalized in excluded_paths or normalized.startswith("graphify-out/"):
+        return True
+    if is_dir and Path(normalized).name in cfg.exclude_dirs:
+        return True
+    if not is_dir and any(part in cfg.exclude_dirs for part in Path(normalized).parts[:-1]):
+        return True
+
+    ignored = False
+    for rule in cfg.ignore_rules:
+        if matches_ignore_rule(rule, normalized, is_dir=is_dir):
+            ignored = not rule.negated
+    return ignored
 
 
 def resolve_workspace_root(root_arg):
@@ -146,6 +335,10 @@ def validate_config(root, cfg: Config, watch_interval):
         raise ValueError("Output files must be distinct paths inside the workspace root.")
     if watch_interval <= 0:
         raise ValueError("--watch-interval must be greater than zero.")
+    if cfg.max_depth is not None and cfg.max_depth < 0:
+        raise ValueError("--max-depth must be zero or greater.")
+    if cfg.progress_every <= 0:
+        raise ValueError("--progress-every must be greater than zero.")
 
 
 def resolve_output_target(root, relative_output, label):
@@ -163,12 +356,15 @@ def safe_stat(path):
     return stats
 
 
-def filter_walk_directories(dirpath, dirnames, cfg: Config):
+def filter_walk_directories(root, dirpath, dirnames, cfg: Config):
     filtered = []
     for directory in dirnames:
-        if directory in cfg.exclude_dirs:
-            continue
         dir_path = Path(dirpath) / directory
+        rel_path = dir_path.relative_to(root).as_posix()
+        if cfg.max_depth is not None and path_depth(rel_path) >= cfg.max_depth:
+            continue
+        if should_ignore_path(rel_path, cfg, is_dir=True):
+            continue
         stats = safe_stat(dir_path)
         if stats is None or not stat.S_ISDIR(stats.st_mode):
             continue
@@ -266,19 +462,24 @@ def collect_files(root, cfg: Config):
     top_level = Counter()
     file_type_counts = Counter()
     total_size = 0
+    reporter = ProgressReporter(enabled=cfg.show_progress, report_every=cfg.progress_every)
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
-        if any(part in cfg.exclude_dirs for part in rel_dir.parts):
+        if rel_dir != Path(".") and should_ignore_path(rel_dir.as_posix(), cfg, is_dir=True):
             continue
-        filter_walk_directories(dirpath, dirnames, cfg)
+        filter_walk_directories(root, dirpath, dirnames, cfg)
+        reporter.saw_directory()
         for name in filenames:
             path = Path(dirpath) / name
             rel_path = path.relative_to(root).as_posix()
-            if is_excluded_path(rel_path, cfg):
+            if cfg.max_depth is not None and path_depth(rel_path) > cfg.max_depth:
+                continue
+            if should_ignore_path(rel_path, cfg):
                 continue
             stats = safe_stat(path)
             if stats is None or not stat.S_ISREG(stats.st_mode):
                 continue
+            reporter.saw_file()
             ext = path.suffix.lower()
             total_size += stats.st_size
             extension_counts[ext or "<none>"] += 1
@@ -301,6 +502,13 @@ def collect_files(root, cfg: Config):
         "primaryFileTypes": [name for name, _ in file_type_counts.most_common(5)],
         "fileInventory": file_inventory,
         "extensionCounts": dict(extension_counts.most_common(50)),
+        "scanSettings": {
+            "maxDepth": cfg.max_depth,
+            "progressEnabled": cfg.show_progress,
+            "progressEvery": cfg.progress_every,
+            "excludedDirectories": sorted(cfg.exclude_dirs),
+            "ignoreSources": list(cfg.ignore_sources),
+        },
     }
 
 
@@ -568,6 +776,7 @@ def build_manifest(root, scan, cfg: Config, refresh_reason="scan"):
                 "markdown": cfg.output_md,
                 "structuredManifest": cfg.output_json,
             },
+            "scanSettings": scan["scanSettings"],
             "suggestedStartingPoints": [],
             "stats": {
                 "totalFiles": scan["totalFiles"],
@@ -615,26 +824,19 @@ def build_manifest(root, scan, cfg: Config, refresh_reason="scan"):
     return manifest
 
 
-def is_excluded_path(rel_path, cfg: Config):
-    normalized = rel_path.replace("\\", "/")
-    excluded = {
-        cfg.output_json.replace("\\", "/"),
-        cfg.output_md.replace("\\", "/"),
-    }
-    return normalized in excluded or normalized.startswith("graphify-out/")
-
-
 def collect_file_snapshot(root, cfg: Config):
     snapshot = {}
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
-        if any(part in cfg.exclude_dirs for part in rel_dir.parts):
+        if rel_dir != Path(".") and should_ignore_path(rel_dir.as_posix(), cfg, is_dir=True):
             continue
-        filter_walk_directories(dirpath, dirnames, cfg)
+        filter_walk_directories(root, dirpath, dirnames, cfg)
         for name in filenames:
             path = Path(dirpath) / name
             rel_path = path.relative_to(root).as_posix()
-            if is_excluded_path(rel_path, cfg):
+            if cfg.max_depth is not None and path_depth(rel_path) > cfg.max_depth:
+                continue
+            if should_ignore_path(rel_path, cfg):
                 continue
             stats = safe_stat(path)
             if stats is None or not stat.S_ISREG(stats.st_mode):
@@ -669,6 +871,7 @@ def build_markdown(manifest, cfg: Config):
     package = manifest["package"]
     changes = manifest["recentChanges"]
     structure = manifest.get("projectStructure", {})
+    scan_settings = workspace.get("scanSettings", {})
     entry_points = structure.get("entryPoints", [])
     areas = structure.get("areas", [])
     components = structure.get("components", [])
@@ -702,6 +905,8 @@ def build_markdown(manifest, cfg: Config):
         ]
         if git["available"] else [f"- Git context unavailable: {format_code_span(git.get('error'), fallback='unknown error')}"]
     )
+    ignore_sources = scan_settings.get("ignoreSources", [])
+    excluded_directories = scan_settings.get("excludedDirectories", [])
 
     lines = [
         "# Workspace Memory",
@@ -730,6 +935,12 @@ def build_markdown(manifest, cfg: Config):
         f"- Total files: {workspace['stats']['totalFiles']}",
         f"- Primary file types: {', '.join(format_code_span(file_type) for file_type in workspace['stats']['primaryFileTypes']) or 'none detected.'}",
         f"- Top-level areas: {', '.join(format_code_span(area) for area in workspace['stats']['topLevelAreas']) or 'none detected.'}",
+        "",
+        "## Scan Settings",
+        f"- Max depth: {format_code_span(scan_settings.get('maxDepth'))}",
+        f"- Ignore sources: {', '.join(format_code_span(path) for path in ignore_sources) or 'none detected.'}",
+        f"- Excluded directories: {', '.join(format_code_span(path) for path in excluded_directories) or 'none detected.'}",
+        f"- Progress reporting: {format_code_span('enabled' if scan_settings.get('progressEnabled') else 'disabled')}",
         "",
         "## Project Structure",
         f"- Architecture summary: {structure.get('overview', 'No structure summary detected.')}",
@@ -792,6 +1003,7 @@ def build_agents_markdown(cfg: Config):
         "```bash",
         "python workspace_scanner.py --root .",
         "intelscan --root .",
+        "intelscan --root . --max-depth 4 --progress",
         "```",
         "",
         "Run in watch mode while editing:",
@@ -807,6 +1019,8 @@ def build_agents_markdown(cfg: Config):
         'python agent_coordinator.py --root . --agent-cmd "python your_agent_task.py"',
         'intelscan-agent --root . --agent-cmd "python your_agent_task.py"',
         "```",
+        "",
+        "Ignore files are supported via `.intelscanignore`, and `.gitignore` is respected by default when present.",
         "",
         "## Generated Files",
         "",
@@ -903,6 +1117,11 @@ def parse_args():
     parser.add_argument("--agents-md", default=AGENTS_MD, help="Agent guide filename used with --init-agents")
     parser.add_argument("--init-agents", action="store_true", help="Create AGENTS.md if it does not already exist")
     parser.add_argument("--exclude-dir", action="append", default=[], help="Additional directory names to exclude from scanning")
+    parser.add_argument("--ignore-file", action="append", default=[], help="Additional ignore file to load from the workspace root")
+    parser.add_argument("--no-gitignore", action="store_true", help="Do not load .gitignore patterns during scans")
+    parser.add_argument("--max-depth", type=int, default=None, help="Maximum directory depth to scan relative to the workspace root")
+    parser.add_argument("--progress", action="store_true", help="Print periodic scan progress for large repositories")
+    parser.add_argument("--progress-every", type=int, default=DEFAULT_PROGRESS_EVERY, help="Report progress every N scanned files")
     parser.add_argument("--watch", action="store_true", help="Run continuously and regenerate manifest on workspace changes")
     parser.add_argument("--watch-interval", type=float, default=3.0, help="Seconds between polling cycles in watch mode")
     return parser.parse_args()
@@ -912,10 +1131,20 @@ def main():
     args = parse_args()
     try:
         root = resolve_workspace_root(args.root)
+        ignore_rules, ignore_sources = load_ignore_rules(
+            root,
+            include_gitignore=not args.no_gitignore,
+            additional_ignore_files=args.ignore_file,
+        )
         cfg = Config(
             output_json=args.output_json,
             output_md=args.output_md,
             exclude_dirs=EXCLUDE_DIRS | set(args.exclude_dir),
+            ignore_rules=ignore_rules,
+            ignore_sources=ignore_sources,
+            max_depth=args.max_depth,
+            show_progress=args.progress,
+            progress_every=args.progress_every,
         )
         validate_config(root, cfg, args.watch_interval)
     except ValueError as exc:

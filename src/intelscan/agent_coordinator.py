@@ -7,32 +7,26 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-IGNORE_DIRS = {"node_modules", ".git", "__pycache__", "target", "build", ".venv", "venv"}
-IGNORE_FILES = {"workspace.json", "workspacememory.md"}
+try:
+    from . import workspace_scanner
+except ImportError:  # pragma: no cover - source-tree fallback
+    import workspace_scanner
+
 SOURCE_SCANNER_PATH = Path("src/intelscan/workspace_scanner.py")
 
 
-def normalize_path(path: str) -> str:
-    return path.replace("\\", "/")
-
-
-def is_excluded(path: str) -> bool:
-    normalized = normalize_path(path)
-    if normalized in IGNORE_FILES:
-        return True
-    return any(part in IGNORE_DIRS for part in normalized.split("/"))
-
-
 def collect_snapshot(root: Path):
+    ignore_rules, ignore_sources = workspace_scanner.load_ignore_rules(root)
+    cfg = workspace_scanner.Config(ignore_rules=ignore_rules, ignore_sources=ignore_sources)
     snapshot = {}
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
-        if any(part in IGNORE_DIRS for part in rel_dir.parts):
+        if rel_dir != Path(".") and workspace_scanner.should_ignore_path(rel_dir.as_posix(), cfg, is_dir=True):
             continue
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+        workspace_scanner.filter_walk_directories(root, dirpath, dirnames, cfg)
         for filename in filenames:
             rel_path = (rel_dir / filename).as_posix()
-            if is_excluded(rel_path):
+            if workspace_scanner.should_ignore_path(rel_path, cfg):
                 continue
             try:
                 stats = (root / rel_path).stat()
@@ -62,7 +56,11 @@ def run_workspace_scanner(root: Path, scanner_path: Optional[Path], skip_initial
 def run_agent_command(root: Path, agent_cmd: str):
     print(f"Running agent command: {agent_cmd}")
     cmd = agent_cmd if os.name == "nt" else shlex.split(agent_cmd)
-    result = subprocess.run(cmd, cwd=root, shell=(os.name == "nt"))
+    env = os.environ.copy()
+    env["INTELSCAN_WORKSPACE_ROOT"] = str(root)
+    env["INTELSCAN_WORKSPACE_JSON"] = str(root / workspace_scanner.OUTPUT_JSON)
+    env["INTELSCAN_WORKSPACE_MD"] = str(root / workspace_scanner.OUTPUT_MD)
+    result = subprocess.run(cmd, cwd=root, shell=(os.name == "nt"), env=env)
     if result.returncode != 0:
         raise RuntimeError(f"Agent command failed with exit code {result.returncode}")
 

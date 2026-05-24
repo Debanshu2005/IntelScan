@@ -7,6 +7,7 @@ A standalone workspace scanner for generating repository metadata that agents ca
 - Scans the workspace root and builds a structured JSON manifest.
 - Writes a human-readable markdown summary alongside the JSON file.
 - Captures workspace statistics, package manifest detection, file inventory, inferred project structure, recent changes, and Git status when available.
+- Skips common generated/dependency folders by default and loads ignore patterns from `.intelscanignore` plus `.gitignore` when present.
 
 ## Why this helps
 
@@ -34,6 +35,7 @@ Optional customize outputs:
 
 ```bash
 python workspace_scanner.py --root . --output-json workspace.json --output-md workspacememory.md
+python workspace_scanner.py --root . --max-depth 4 --progress
 ```
 
 ## Output files
@@ -42,6 +44,14 @@ python workspace_scanner.py --root . --output-json workspace.json --output-md wo
 - `workspacememory.md` - human-readable workspace summary.
 
 Use `--init-agents` to bootstrap a canonical `AGENTS.md` plus companion instruction files for `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` when those files are missing.
+
+## Ignore and performance controls
+
+- Use `.intelscanignore` for scanner-specific exclusions.
+- `.gitignore` is respected by default; pass `--no-gitignore` to disable that behavior.
+- Use `--exclude-dir` for one-off directory-name exclusions.
+- Use `--max-depth` to limit recursive traversal in large repositories.
+- Use `--progress` to print periodic scan progress while a large scan is running.
 
 ## Agent integration pattern
 
@@ -63,6 +73,7 @@ The wrapper does this:
 - runs the requested agent command
 - detects whether workspace files changed
 - reruns `workspace_scanner.py` automatically after agent completion
+- exports `INTELSCAN_WORKSPACE_ROOT`, `INTELSCAN_WORKSPACE_JSON`, and `INTELSCAN_WORKSPACE_MD` for agent wrappers that can auto-load context
 
 ## VS Code tasks
 

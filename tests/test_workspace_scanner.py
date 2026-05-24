@@ -35,6 +35,12 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             scanner.validate_config(self.root, cfg, watch_interval=0)
 
+    def test_validate_config_rejects_negative_max_depth(self):
+        cfg = scanner.Config(max_depth=-1)
+
+        with self.assertRaises(ValueError):
+            scanner.validate_config(self.root, cfg, watch_interval=1)
+
     def test_collect_files_skips_symlinked_files(self):
         (self.root / "safe.txt").write_text("safe", encoding="utf-8")
 
@@ -112,8 +118,9 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
         scan = scanner.collect_files(self.root, cfg)
         manifest = scanner.build_manifest(self.root, scan, cfg)
 
-        self.assertEqual(2, manifest["schemaVersion"])
+        self.assertEqual(3, manifest["schemaVersion"])
         self.assertIn("projectStructure", manifest)
+        self.assertIn("scanSettings", manifest["workspace"])
         self.assertEqual("Python", manifest["projectStructure"]["primaryStack"])
         self.assertEqual("package-oriented", manifest["projectStructure"]["architectureStyle"])
         self.assertEqual("demo", manifest["projectStructure"]["entryPoints"][0]["name"])
@@ -143,11 +150,54 @@ class WorkspaceScannerSecurityTests(unittest.TestCase):
 
         markdown = scanner.build_markdown(manifest, cfg)
 
+        self.assertIn("## Scan Settings", markdown)
+        self.assertIn("- Max depth: `none`", markdown)
         self.assertIn("## Project Structure", markdown)
         self.assertIn("- Architecture summary: Python project with a package-oriented layout.", markdown)
         self.assertIn("Packaging and CLI entry points are configured in `pyproject.toml`.", markdown)
         self.assertIn("- Entry point: `demo` -> `intelscan.workspace_scanner:main` via `src/intelscan/workspace_scanner.py`", markdown)
         self.assertIn("- Component: `src/intelscan/workspace_scanner.py` - workspace scanning and manifest generation", markdown)
+
+    def test_collect_files_respects_gitignore_by_default(self):
+        (self.root / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+        (self.root / "visible.txt").write_text("visible", encoding="utf-8")
+        (self.root / "ignored").mkdir()
+        (self.root / "ignored" / "hidden.txt").write_text("hidden", encoding="utf-8")
+
+        ignore_rules, ignore_sources = scanner.load_ignore_rules(self.root)
+        cfg = scanner.Config(ignore_rules=ignore_rules, ignore_sources=ignore_sources)
+        scan = scanner.collect_files(self.root, cfg)
+
+        self.assertEqual([".gitignore", "visible.txt"], [item["path"] for item in scan["fileInventory"]])
+        self.assertEqual([".gitignore"], scan["scanSettings"]["ignoreSources"])
+
+    def test_collect_files_respects_intelscanignore_and_negation(self):
+        (self.root / ".intelscanignore").write_text("*.log\n!important.log\n", encoding="utf-8")
+        (self.root / "debug.log").write_text("hidden", encoding="utf-8")
+        (self.root / "important.log").write_text("keep", encoding="utf-8")
+        (self.root / "notes.txt").write_text("keep", encoding="utf-8")
+
+        ignore_rules, ignore_sources = scanner.load_ignore_rules(self.root, include_gitignore=False)
+        cfg = scanner.Config(ignore_rules=ignore_rules, ignore_sources=ignore_sources)
+        scan = scanner.collect_files(self.root, cfg)
+
+        self.assertEqual(
+            [".intelscanignore", "important.log", "notes.txt"],
+            [item["path"] for item in scan["fileInventory"]],
+        )
+
+    def test_collect_files_respects_max_depth(self):
+        (self.root / "README.md").write_text("# Demo\n", encoding="utf-8")
+        (self.root / "src").mkdir()
+        (self.root / "src" / "top.py").write_text("print('top')\n", encoding="utf-8")
+        (self.root / "src" / "pkg").mkdir()
+        (self.root / "src" / "pkg" / "nested.py").write_text("print('nested')\n", encoding="utf-8")
+
+        cfg = scanner.Config(max_depth=1)
+        scan = scanner.collect_files(self.root, cfg)
+
+        self.assertEqual(["README.md", "src/top.py"], [item["path"] for item in scan["fileInventory"]])
+        self.assertEqual(1, scan["scanSettings"]["maxDepth"])
 
     def test_write_output_creates_only_root_manifest_files(self):
         cfg = scanner.Config()
