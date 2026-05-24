@@ -77,6 +77,7 @@ intelscan-agent --root . --agent-cmd "python your_agent_task.py"
 ```
 
 The coordinator also exports `INTELSCAN_WORKSPACE_ROOT`, `INTELSCAN_WORKSPACE_JSON`, and `INTELSCAN_WORKSPACE_MD` for agent wrappers that want to consume the generated context automatically.
+On Windows, `intelscan-agent` first tries normal `PATH` lookup, can search additional directories with `--agent-search-dir`, and falls back to VS Code extension `bin` folders when the requested agent CLI is bundled there.
 
 For source-tree development without installing globally:
 
@@ -114,6 +115,7 @@ Coordinator CLI:
 intelscan-agent --root . --agent-cmd "python your_agent_task.py"
 intelscan-agent --root . --agent-cmd "python your_agent_task.py" --always-refresh
 intelscan-agent --root . --agent-cmd "python your_agent_task.py" --skip-initial-scan
+intelscan-agent --root . --agent-cmd "myagent --help" --agent-search-dir "D:\Tools\Agents"
 ```
 
 ## Repository Layout

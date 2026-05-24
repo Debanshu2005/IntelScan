@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - source-tree fallback
 
 SOURCE_SCANNER_PATH = Path("src/intelscan/workspace_scanner.py")
 WINDOWS_SHELL_CHARS = ("|", "&", "<", ">", "(", ")", "%")
+WINDOWS_EXECUTABLE_SUFFIXES = (".exe", ".cmd", ".bat", ".ps1")
 
 
 def collect_snapshot(root: Path):
@@ -61,7 +62,56 @@ def strip_wrapping_quotes(value: str) -> str:
     return value
 
 
-def resolve_agent_command(agent_cmd: str):
+def candidate_executable_names(executable: str):
+    normalized = Path(strip_wrapping_quotes(executable)).name
+    if os.name != "nt" or Path(normalized).suffix:
+        return [normalized]
+    return [normalized, *(normalized + suffix for suffix in WINDOWS_EXECUTABLE_SUFFIXES)]
+
+
+def find_executable_in_directories(executable: str, search_dirs):
+    for search_dir in search_dirs:
+        directory = Path(search_dir).expanduser()
+        for candidate_name in candidate_executable_names(executable):
+            candidate_path = directory / candidate_name
+            try:
+                if candidate_path.is_file():
+                    return str(candidate_path)
+            except OSError:
+                continue
+    return ""
+
+
+def find_windows_extension_executable(executable: str):
+    candidate_names = candidate_executable_names(executable)
+
+    home_dir = Path.home()
+    extension_roots = [
+        home_dir / ".vscode" / "extensions",
+        home_dir / ".vscode-insiders" / "extensions",
+    ]
+    candidates = []
+    for extensions_dir in extension_roots:
+        for candidate_name in candidate_names:
+            try:
+                matches = extensions_dir.glob(f"*/bin/**/{candidate_name}")
+            except OSError:
+                continue
+            for match in matches:
+                try:
+                    stats = match.stat()
+                except OSError:
+                    continue
+                candidates.append((stats.st_mtime_ns, match))
+
+    if not candidates:
+        return ""
+
+    candidates.sort(key=lambda item: (item[0], str(item[1]).lower()), reverse=True)
+    return str(candidates[0][1])
+
+
+def resolve_agent_command(agent_cmd: str, extra_search_dirs=None):
     if os.name != "nt":
         return shlex.split(agent_cmd), False
 
@@ -74,6 +124,10 @@ def resolve_agent_command(agent_cmd: str):
 
     executable = strip_wrapping_quotes(argv[0])
     resolved = shutil.which(executable)
+    if not resolved:
+        resolved = find_executable_in_directories(executable, extra_search_dirs or [])
+    if not resolved:
+        resolved = find_windows_extension_executable(executable)
     if resolved:
         argv[0] = resolved
         return argv, False
@@ -85,9 +139,9 @@ def resolve_agent_command(agent_cmd: str):
     return agent_cmd, True
 
 
-def run_agent_command(root: Path, agent_cmd: str):
+def run_agent_command(root: Path, agent_cmd: str, extra_search_dirs=None):
     print(f"Running agent command: {agent_cmd}")
-    cmd, use_shell = resolve_agent_command(agent_cmd)
+    cmd, use_shell = resolve_agent_command(agent_cmd, extra_search_dirs=extra_search_dirs)
     env = os.environ.copy()
     env["INTELSCAN_WORKSPACE_ROOT"] = str(root)
     env["INTELSCAN_WORKSPACE_JSON"] = str(root / workspace_scanner.OUTPUT_JSON)
@@ -102,6 +156,7 @@ def main():
     parser.add_argument("--root", default=".", help="Workspace root directory")
     parser.add_argument("--scanner", default="", help="Optional workspace scanner script path")
     parser.add_argument("--agent-cmd", required=True, help="Shell command that runs the agent pass")
+    parser.add_argument("--agent-search-dir", action="append", default=[], help="Additional directory to search for the agent executable when it is not on PATH")
     parser.add_argument("--skip-initial-scan", action="store_true", help="Do not run the scanner before the agent command")
     parser.add_argument("--always-refresh", action="store_true", help="Always refresh the manifest after the agent command, even if no file changes are detected")
     args = parser.parse_args()
@@ -114,7 +169,7 @@ def main():
     run_workspace_scanner(root, scanner_path, args.skip_initial_scan)
     before_snapshot = collect_snapshot(root)
     try:
-        run_agent_command(root, args.agent_cmd)
+        run_agent_command(root, args.agent_cmd, extra_search_dirs=args.agent_search_dir)
     except RuntimeError as exc:
         print(exc, file=sys.stderr)
         sys.exit(1)

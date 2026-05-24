@@ -74,6 +74,7 @@ The wrapper does this:
 - detects whether workspace files changed
 - reruns `workspace_scanner.py` automatically after agent completion
 - exports `INTELSCAN_WORKSPACE_ROOT`, `INTELSCAN_WORKSPACE_JSON`, and `INTELSCAN_WORKSPACE_MD` for agent wrappers that can auto-load context
+- on Windows, can search `PATH`, optional `--agent-search-dir` locations, and VS Code extension `bin` folders for the requested agent CLI
 
 ## VS Code tasks
 

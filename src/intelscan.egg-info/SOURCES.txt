@@ -10,4 +10,5 @@ src/intelscan.egg-info/SOURCES.txt
 src/intelscan.egg-info/dependency_links.txt
 src/intelscan.egg-info/entry_points.txt
 src/intelscan.egg-info/top_level.txt
+tests/test_agent_coordinator.py
 tests/test_workspace_scanner.py
