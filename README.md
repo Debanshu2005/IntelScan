@@ -70,10 +70,12 @@ Create a project-local agent guide plus companion agent instruction files when t
 intelscan --root . --init-agents
 ```
 
-Run an agent command with automatic manifest refresh before and after the pass:
+Use your AI agent's CLI mode via IntelScan, with automatic manifest refresh before and after the pass:
 
 ```bash
-intelscan-agent --root . --agent-cmd "python your_agent_task.py"
+intelscan-agent --root . --agent-cmd "codex"
+intelscan-agent --root . --agent-cmd "claude"
+intelscan-agent --root . --agent-cmd "myagent --help"
 ```
 
 The coordinator also exports `INTELSCAN_WORKSPACE_ROOT`, `INTELSCAN_WORKSPACE_JSON`, and `INTELSCAN_WORKSPACE_MD` for agent wrappers that want to consume the generated context automatically.
@@ -112,9 +114,9 @@ intelscan --root . --max-depth 4 --progress
 Coordinator CLI:
 
 ```bash
-intelscan-agent --root . --agent-cmd "python your_agent_task.py"
-intelscan-agent --root . --agent-cmd "python your_agent_task.py" --always-refresh
-intelscan-agent --root . --agent-cmd "python your_agent_task.py" --skip-initial-scan
+intelscan-agent --root . --agent-cmd "codex"
+intelscan-agent --root . --agent-cmd "claude" --always-refresh
+intelscan-agent --root . --agent-cmd "myagent --help" --skip-initial-scan
 intelscan-agent --root . --agent-cmd "myagent --help" --agent-search-dir "D:\Tools\Agents"
 ```
 
