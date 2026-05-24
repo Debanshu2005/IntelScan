@@ -2,6 +2,7 @@
 import argparse
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ except ImportError:  # pragma: no cover - source-tree fallback
     import workspace_scanner
 
 SOURCE_SCANNER_PATH = Path("src/intelscan/workspace_scanner.py")
+WINDOWS_SHELL_CHARS = ("|", "&", "<", ">", "(", ")", "%")
 
 
 def collect_snapshot(root: Path):
@@ -53,14 +55,44 @@ def run_workspace_scanner(root: Path, scanner_path: Optional[Path], skip_initial
         raise RuntimeError(f"Workspace scanner failed with exit code {result.returncode}")
 
 
+def strip_wrapping_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def resolve_agent_command(agent_cmd: str):
+    if os.name != "nt":
+        return shlex.split(agent_cmd), False
+
+    if any(char in agent_cmd for char in WINDOWS_SHELL_CHARS):
+        return agent_cmd, True
+
+    argv = shlex.split(agent_cmd, posix=False)
+    if not argv:
+        raise RuntimeError("Agent command cannot be empty.")
+
+    executable = strip_wrapping_quotes(argv[0])
+    resolved = shutil.which(executable)
+    if resolved:
+        argv[0] = resolved
+        return argv, False
+
+    if Path(executable).exists():
+        argv[0] = executable
+        return argv, False
+
+    return agent_cmd, True
+
+
 def run_agent_command(root: Path, agent_cmd: str):
     print(f"Running agent command: {agent_cmd}")
-    cmd = agent_cmd if os.name == "nt" else shlex.split(agent_cmd)
+    cmd, use_shell = resolve_agent_command(agent_cmd)
     env = os.environ.copy()
     env["INTELSCAN_WORKSPACE_ROOT"] = str(root)
     env["INTELSCAN_WORKSPACE_JSON"] = str(root / workspace_scanner.OUTPUT_JSON)
     env["INTELSCAN_WORKSPACE_MD"] = str(root / workspace_scanner.OUTPUT_MD)
-    result = subprocess.run(cmd, cwd=root, shell=(os.name == "nt"), env=env)
+    result = subprocess.run(cmd, cwd=root, shell=use_shell, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"Agent command failed with exit code {result.returncode}")
 
